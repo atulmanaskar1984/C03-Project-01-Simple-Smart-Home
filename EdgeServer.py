@@ -32,9 +32,9 @@ class Edge_Server:
         if result_code == 0:
             print("Edge server connected to MQTT server successfully.")
             self.client.subscribe(Constant.MAIN_TOPIC)
-            self.client.subscribe(Constant.STATUS)
-            self.client.subscribe(Constant.SWITCH_ON_OFF + "output")
-            self.client.subscribe(Constant.CHANGE_STATE + "output")
+            #self.client.subscribe(Constant.STATUS)
+            #self.client.subscribe(Constant.SWITCH_ON_OFF + "output")
+            #self.client.subscribe(Constant.CHANGE_STATE + "output")
         else:
             print("Error while connecting to MQTT server.")
         
@@ -71,8 +71,13 @@ class Edge_Server:
         device_details = json.loads(str_device_details)
         new_device = Device(device_details['device_id'], device_details['device_type'], device_details['device_room'])
         self._registered_list.append(new_device)
+        print(f"\nRegistration request is acknowledged for device "
+              f"'{device_details['device_id']}' in {device_details['device_room']}")
+        print(f"Request is processed for {device_details['device_id']}.")
         self.client.publish(Constant.REGISTRATION_SUCCESS + device_details['device_id'],
-                            f"{device_details['device_id']} Registered! - Registration status is available for '{device_details['device_id']}'")
+                            f"{device_details['device_id']} Registered! - "
+                            f"Registration status is available for '{device_details['device_id']}' "
+                            f"- {device_details['registration_status']}")
         return
 
     # Getting the status for the connected devices
@@ -103,7 +108,7 @@ class Edge_Server:
         if len(device_id) > 0:
             self.client.publish(Constant.CHANGE_STATE + device_id, value)
         if len(room_type) > 0:
-            self.client.publish(Constant.CHANGE_STATE + room_type, value)
+            self.client.publish(Constant.CHANGE_STATE + device_type + '/' + room_type, value)
         if len(device_id) == 0 and len(room_type) == 0:
             for device in self._registered_list:
                 if device.device_type == device_type:

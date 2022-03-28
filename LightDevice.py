@@ -28,20 +28,21 @@ class Light_Device():
         self._switch_status = "OFF"
 
     def _register_device(self, device_id, room_type, device_type):
+        self._device_registration_flag = True
         self.client.publish(Constant.CONNECT, payload=json.dumps(
             {"device_id": device_id,
              "device_type": device_type,
-             "device_room": room_type
+             "device_room": room_type,
+             "registration_status": self._device_registration_flag
              }))
 
     # Connect method to subscribe to various topics.
     def _on_connect(self, client, userdata, flags, result_code):
         if result_code == 0:
-            print("Light Device connected to MQTT server successfully.")
             self.client.subscribe(Constant.REGISTRATION_SUCCESS + self._device_id)
-            self.client.subscribe("my_smart_home/light/#")
             self.client.subscribe(Constant.HEALTH_CHECK + self._device_id)
             self.client.subscribe(Constant.SWITCH_ON_OFF + "#")
+            self.client.subscribe(Constant.CHANGE_STATE + "#")
         else:
             print("Error while connecting to MQTT server.")
 
@@ -64,13 +65,14 @@ class Light_Device():
         if msg.topic.__contains__(Constant.SWITCH_ON_OFF + self._device_id) \
                 or msg.topic.__contains__(Constant.SWITCH_ON_OFF + Constant.LIGHT) \
                 or msg.topic.__contains__(Constant.SWITCH_ON_OFF + self._room_type):
-            if self._set_switch_status(msg.payload.decode('utf-8')):
+            output = self._set_switch_status(msg.payload.decode('utf-8'))
+            if output == Constant.SUCCESS:
                 self.client.publish(Constant.SWITCH_ON_OFF + "output", json.dumps(
                     {'status': Constant.SUCCESS,
                      'message': f"{self._device_id} in room {self._room_type} is successfully"
                                 f" switched {msg.payload.decode('utf-8')}"
                      }))
-            else:
+            if output == Constant.SAME_VALUE:
                 self.client.publish(Constant.SWITCH_ON_OFF + "output", json.dumps(
                     {'status': Constant.INFO,
                      'message': f"{self._device_id} in room {self._room_type} is already"
@@ -78,8 +80,7 @@ class Light_Device():
                      }))
 
         if msg.topic.__contains__(Constant.CHANGE_STATE + self._device_id) \
-                or msg.topic.__contains__(Constant.CHANGE_STATE + Constant.LIGHT) \
-                or msg.topic.__contains__(Constant.CHANGE_STATE + self._room_type):
+                or msg.topic.__contains__(Constant.CHANGE_STATE + Constant.LIGHT + "/" + self._room_type):
             output = self._set_light_intensity(msg.payload.decode('utf-8'))
             if output == Constant.SUCCESS:
                 self.client.publish(Constant.CHANGE_STATE + "output", json.dumps(
@@ -101,8 +102,6 @@ class Light_Device():
                     {'status': Constant.FAILURE,
                      'message': message
                      }))
-
-            self.client.publish(Constant.CHANGE_STATE + "output")
 
     # Getting the current switch status of devices
     def _get_switch_status(self):

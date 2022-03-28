@@ -30,18 +30,18 @@ class AC_Device():
 
     # calling registration method to register the device
     def _register_device(self, device_id, room_type, device_type):
+        self._device_registration_flag = True
         self.client.publish(Constant.CONNECT, payload=json.dumps(
             {"device_id": device_id,
              "device_type": device_type,
-             "device_room": room_type
+             "device_room": room_type,
+             "registration_status": self._device_registration_flag
              }))
 
     # Connect method to subscribe to various topics. 
     def _on_connect(self, client, userdata, flags, result_code):
         if result_code == 0:
-            print("AC Device connected to MQTT server successfully.")
             self.client.subscribe(Constant.REGISTRATION_SUCCESS + self._device_id)
-            self.client.subscribe("my_smart_home/ac/#")
             self.client.subscribe(Constant.HEALTH_CHECK + self._device_id)
             self.client.subscribe(Constant.SWITCH_ON_OFF + "#")
             self.client.subscribe(Constant.CHANGE_STATE + "#")
@@ -68,34 +68,42 @@ class AC_Device():
         if msg.topic.__contains__(Constant.SWITCH_ON_OFF + self._device_id) \
                 or msg.topic.__contains__(Constant.SWITCH_ON_OFF + Constant.AC) \
                 or msg.topic.__contains__(Constant.SWITCH_ON_OFF + self._room_type):
-            if self._set_switch_status(msg.payload.decode('utf-8')):
+            output = self._set_switch_status(msg.payload.decode('utf-8'))
+            if output == Constant.SUCCESS:
                 self.client.publish(Constant.SWITCH_ON_OFF + "output", json.dumps(
-                    {'status': "SUCCESS",
+                    {'status': Constant.SUCCESS,
                      'message': f"{self._device_id} in room {self._room_type} is successfully"
                                 f" switched {msg.payload.decode('utf-8')}"
                      }))
-            else:
+            if output == Constant.SAME_VALUE:
                 self.client.publish(Constant.SWITCH_ON_OFF + "output", json.dumps(
-                    {'status': "FAILURE",
+                    {'status': Constant.INFO,
                      'message': f"{self._device_id} in room {self._room_type} is already"
                                 f" switched {msg.payload.decode('utf-8')}"
                      }))
 
         if msg.topic.__contains__(Constant.CHANGE_STATE + self._device_id) \
-            or msg.topic.__contains__(Constant.CHANGE_STATE + Constant.AC) \
-                or msg.topic.__contains__(Constant.CHANGE_STATE + self._room_type):
-            if self._set_temperature(msg.payload.decode('utf-8')):
+            or msg.topic.__contains__(Constant.CHANGE_STATE + Constant.AC + "/" + self._room_type):
+            output = self._set_temperature(msg.payload.decode('utf-8'))
+            if output == Constant.SUCCESS:
                 self.client.publish(Constant.CHANGE_STATE + "output", json.dumps(
-                                    {'status': "SUCCESS",
+                                    {'status': Constant.SUCCESS,
                                      'message': f"Temperature of {self._device_id} in room {self._room_type} "
                                                 f"is changed successfully to {msg.payload.decode('utf-8')} degree Celsius"
                                      }))
-            else:
+            if output == Constant.SAME_VALUE:
                 self.client.publish(Constant.CHANGE_STATE + "output", json.dumps(
-                                    {'status': "FAILURE",
+                                    {'status': Constant.INFO,
                                      'message': f"Couldn't able to change Temperature of {self._device_id} "
                                                 f"in room {self._room_type} to {msg.payload.decode('utf-8')},"
                                                 f" it might be off or already having same temperature"
+                                     }))
+            if output == Constant.INVALID_VALUE:
+                self.client.publish(Constant.CHANGE_STATE + "output", json.dumps(
+                                    {'status': Constant.INFO,
+                                     'message': f"Temperature change failed of {self._device_id} "
+                                                f"in room {self._room_type} to {msg.payload.decode('utf-8')},"
+                                                f" invalid value provided"
                                      }))
 
     # Getting the current switch status of devices
@@ -103,12 +111,12 @@ class AC_Device():
         return self._switch_status
 
     # Setting the the switch of devices
-    def _set_switch_status(self, switch_state):
-        if self._switch_status != switch_state:
-            self._switch_status = switch_state
-            return True
+    def _set_switch_status(self, switch_status):
+        if self._switch_status != switch_status:
+            self._switch_status = switch_status
+            return Constant.SUCCESS
         else:
-            return False
+            return Constant.SAME_VALUE
 
     # Getting the temperature for the devices
     def _get_temperature(self):
@@ -117,10 +125,13 @@ class AC_Device():
     # Setting up the temperature of the devices
     def _set_temperature(self, temperature):
         if self._get_switch_status() == "ON" and self._temperature != temperature:
-            self._temperature = temperature
-            return True
+            if 22 < int(temperature) < 30:
+                self._temperature = temperature
+                return Constant.SUCCESS
+            else:
+                return Constant.INVALID_VALUE
         else:
-            return False
+            return Constant.SAME_VALUE
 
 
     
